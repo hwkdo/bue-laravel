@@ -53,4 +53,26 @@ class BueLaravel {
         ->where('bnr', $betriebsnr)
         ->first();  
     }
+
+    public function getBetriebsnrByVorgangsnummer($vorgangsnummer)
+    {
+        $data = DB::connection(config('bue-laravel.database.connection'))
+        ->table('intranet.betr_stamm')
+        ->select('bnr')
+        ->where('gewerbeamtuuid', $vorgangsnummer)
+        ->first();  
+
+        return $data ? $data->bnr : null;
+    }
+
+    public function getVorgangsnummerByBetriebsnr($betriebsnr)
+    {
+        $data = DB::connection(config('bue-laravel.database.connection'))
+        ->table('intranet.betr_stamm')
+        ->select('gewerbeamtuuid')
+        ->where('bnr', $betriebsnr)
+        ->first();
+
+        return $data ? $data->gewerbeamtuuid : null;
+    }
 }
