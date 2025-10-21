@@ -36,4 +36,21 @@ class BueLaravel {
         ->select('*')
         ->get();  
     }
+
+    public function getBetriebe()
+    {
+        return DB::connection(config('bue-laravel.database.connection'))
+        ->table('intranet.betr_stamm')
+        ->select('*')
+        ->get();  
+    }
+
+    public function getBetriebByBetriebsnr($betriebsnr)
+    {
+        return DB::connection(config('bue-laravel.database.connection'))
+        ->table('intranet.betr_stamm')
+        ->select('*')
+        ->where('bnr', $betriebsnr)
+        ->first();  
+    }
 }
