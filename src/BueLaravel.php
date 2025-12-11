@@ -75,4 +75,13 @@ class BueLaravel {
 
         return $data ? $data->gewerbeamtuuid : null;
     }
+
+    public function getRaumById($id)
+    {
+        return DB::connection(config('bue-laravel.database.connection'))
+        ->table('intranet.v_raumliste')
+        ->select('*')
+        ->where('id', $id)
+        ->first();
+    }
 }
