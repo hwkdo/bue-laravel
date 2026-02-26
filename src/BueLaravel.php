@@ -85,6 +85,15 @@ class BueLaravel {
         ->first();
     }
 
+    public function getLieferantByNummer(string $nummer): ?object
+    {
+        return DB::connection(config('bue-laravel.database.connection'))
+            ->table('Intranet.MV_HWKDO_Lieferanten')
+            ->select('lieferantenname', 'lieferantennummer')
+            ->where('lieferantennummer', $nummer)
+            ->first();
+    }
+
     public function getLieferanten(string $search = ''): \Illuminate\Support\Collection
     {
         return DB::connection(config('bue-laravel.database.connection'))
