@@ -84,4 +84,16 @@ class BueLaravel {
         ->where('id', $id)
         ->first();
     }
+
+    public function getLieferanten(string $search = ''): \Illuminate\Support\Collection
+    {
+        return DB::connection(config('bue-laravel.database.connection'))
+            ->table('Intranet.MV_HWKDO_Lieferanten')
+            ->select('lieferantenname', 'lieferantennummer')
+            ->when($search, fn ($q) => $q->whereRaw('LOWER(lieferantenname) LIKE ?', ['%' . strtolower($search) . '%']))
+            ->distinct()
+            ->orderBy('lieferantenname')
+            ->limit(100)
+            ->get();
+    }
 }
