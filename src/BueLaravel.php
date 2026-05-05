@@ -2,65 +2,67 @@
 
 namespace Hwkdo\BueLaravel;
 
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
-class BueLaravel {
-
-    public function getFachbereiche() {
+class BueLaravel
+{
+    public function getFachbereiche()
+    {
         return DB::connection(config('bue-laravel.database.connection'))
-        ->table('intranet.v_fachbereiche')
-        ->select('*')
-        ->get();        
+            ->table('intranet.v_fachbereiche')
+            ->select('*')
+            ->get();
     }
 
     public function getGewerke()
     {
         return DB::connection(config('bue-laravel.database.connection'))
-        ->table('intranet.v_gewerbe')
-        ->select('*')
-        ->get();        
+            ->table('intranet.v_gewerbe')
+            ->select('*')
+            ->get();
     }
 
     public function getEintragungsvorraussetzungen()
     {
         return DB::connection(config('bue-laravel.database.connection'))
-        ->table('intranet.v_eintragungsvoraussetzung')
-        ->select('*')
-        ->get();  
+            ->table('intranet.v_eintragungsvoraussetzung')
+            ->select('*')
+            ->get();
     }
 
     public function getRechtsformen()
     {
         return DB::connection(config('bue-laravel.database.connection'))
-        ->table('intranet.v_rechtsform')
-        ->select('*')
-        ->get();  
+            ->table('intranet.v_rechtsform')
+            ->select('*')
+            ->get();
     }
 
     public function getBetriebe()
     {
         return DB::connection(config('bue-laravel.database.connection'))
-        ->table('intranet.betr_stamm')
-        ->select('*')
-        ->get();  
+            ->table('intranet.betr_stamm')
+            ->select('*')
+            ->get();
     }
 
     public function getBetriebByBetriebsnr($betriebsnr)
     {
         return DB::connection(config('bue-laravel.database.connection'))
-        ->table('intranet.betr_stamm')
-        ->select('*')
-        ->where('bnr', $betriebsnr)
-        ->first();  
+            ->table('intranet.betr_stamm')
+            ->select('*')
+            ->where('bnr', $betriebsnr)
+            ->first();
     }
 
     public function getBetriebsnrByVorgangsnummer($vorgangsnummer)
     {
         $data = DB::connection(config('bue-laravel.database.connection'))
-        ->table('intranet.betr_stamm')
-        ->select('bnr')
-        ->where('gewerbeamtuuid', $vorgangsnummer)
-        ->first();  
+            ->table('intranet.betr_stamm')
+            ->select('bnr')
+            ->where('gewerbeamtuuid', $vorgangsnummer)
+            ->first();
 
         return $data ? $data->bnr : null;
     }
@@ -68,10 +70,10 @@ class BueLaravel {
     public function getVorgangsnummerByBetriebsnr($betriebsnr)
     {
         $data = DB::connection(config('bue-laravel.database.connection'))
-        ->table('intranet.betr_stamm')
-        ->select('gewerbeamtuuid')
-        ->where('bnr', $betriebsnr)
-        ->first();
+            ->table('intranet.betr_stamm')
+            ->select('gewerbeamtuuid')
+            ->where('bnr', $betriebsnr)
+            ->first();
 
         return $data ? $data->gewerbeamtuuid : null;
     }
@@ -79,10 +81,10 @@ class BueLaravel {
     public function getRaumById($id)
     {
         return DB::connection(config('bue-laravel.database.connection'))
-        ->table('intranet.v_raumliste')
-        ->select('*')
-        ->where('id', $id)
-        ->first();
+            ->table('intranet.v_raumliste')
+            ->select('*')
+            ->where('id', $id)
+            ->first();
     }
 
     public function getLieferantByNummer(string $nummer): ?object
@@ -94,15 +96,55 @@ class BueLaravel {
             ->first();
     }
 
-    public function getLieferanten(string $search = ''): \Illuminate\Support\Collection
+    public function getLieferanten(string $search = ''): Collection
     {
         return DB::connection(config('bue-laravel.database.connection'))
             ->table('Intranet.MV_HWKDO_Lieferanten')
             ->select('lieferantenname', 'lieferantennummer')
-            ->when($search, fn ($q) => $q->whereRaw('LOWER(lieferantenname) LIKE ?', ['%' . strtolower($search) . '%']))
+            ->when($search, fn ($q) => $q->whereRaw('LOWER(lieferantenname) LIKE ?', ['%'.strtolower($search).'%']))
             ->distinct()
             ->orderBy('lieferantenname')
             ->limit(100)
             ->get();
+    }
+
+    /**
+     * Liefert alle Lieferanten mit allen verfügbaren Stammdaten-Spalten
+     * (lieferantenstrasse, lieferantenhausnummer, lieferantenplz, lieferantenort, lieferanteniban …).
+     * Für Sync-Jobs gedacht (kein Limit).
+     */
+    public function getAllLieferanten(): Collection
+    {
+        return DB::connection(config('bue-laravel.database.connection'))
+            ->table('Intranet.MV_HWKDO_Lieferanten')
+            ->select('*')
+            ->orderBy('lieferantenname')
+            ->get();
+    }
+
+    /**
+     * Liefert alle Kostenstellen (read-only) aus der bue-laravel-Connection.
+     * Spalten in der Quelle: kostenstelle, kobe (= Bezeichnung) u. a.
+     */
+    public function getKostenstellen(string $search = ''): Collection
+    {
+        return DB::connection(config('bue-laravel.database.connection'))
+            ->table('Intranet.HWKDO_Kostenstellen')
+            ->select('*')
+            ->when($search, fn ($q) => $q->whereRaw('LOWER(kobe) LIKE ?', ['%'.strtolower($search).'%']))
+            ->orderBy('kostenstelle')
+            ->get();
+    }
+
+    /**
+     * Liefert eine Kostenstelle anhand der Nummer (oder null, falls nicht vorhanden).
+     */
+    public function getKostenstelleByNummer(string $nummer): ?object
+    {
+        return DB::connection(config('bue-laravel.database.connection'))
+            ->table('Intranet.HWKDO_Kostenstellen')
+            ->select('*')
+            ->where('kostenstelle', $nummer)
+            ->first();
     }
 }
