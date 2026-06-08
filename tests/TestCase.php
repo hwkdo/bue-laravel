@@ -2,9 +2,9 @@
 
 namespace Hwkdo\BueLaravel\Tests;
 
+use Hwkdo\BueLaravel\BueLaravelServiceProvider;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Orchestra\Testbench\TestCase as Orchestra;
-use Hwkdo\BueLaravel\BueLaravelServiceProvider;
 
 class TestCase extends Orchestra
 {

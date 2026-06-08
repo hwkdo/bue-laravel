@@ -5,59 +5,70 @@ declare(strict_types=1);
 namespace Hwkdo\BueLaravel;
 
 use Hwkdo\BueLaravel\Support\FormwerkVorgangsnummerResolver;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class BueLaravel
 {
     public function __construct(
+        private readonly ?string $connectionName = null,
         private readonly FormwerkVorgangsnummerResolver $vorgangsnummerResolver = new FormwerkVorgangsnummerResolver,
     ) {}
 
+    public function using(string $connectionName): self
+    {
+        return new self($connectionName, $this->vorgangsnummerResolver);
+    }
+
+    public function connection(): string
+    {
+        return $this->connectionName ?? config('bue-laravel.database.connection');
+    }
+
+    public function table(string $table): Builder
+    {
+        return DB::connection($this->connection())->table($table);
+    }
+
     public function getFachbereiche()
     {
-        return DB::connection(config('bue-laravel.database.connection'))
-            ->table('intranet.v_fachbereiche')
+        return $this->table('intranet.v_fachbereiche')
             ->select('*')
             ->get();
     }
 
     public function getGewerke()
     {
-        return DB::connection(config('bue-laravel.database.connection'))
-            ->table('intranet.v_gewerbe')
+        return $this->table('intranet.v_gewerbe')
             ->select('*')
             ->get();
     }
 
     public function getEintragungsvorraussetzungen()
     {
-        return DB::connection(config('bue-laravel.database.connection'))
-            ->table('intranet.v_eintragungsvoraussetzung')
+        return $this->table('intranet.v_eintragungsvoraussetzung')
             ->select('*')
             ->get();
     }
 
     public function getRechtsformen()
     {
-        return DB::connection(config('bue-laravel.database.connection'))
-            ->table('intranet.v_rechtsform')
+        return $this->table('intranet.v_rechtsform')
             ->select('*')
             ->get();
     }
 
     public function getBetriebe()
     {
-        return DB::connection(config('bue-laravel.database.connection'))
-            ->table('intranet.betr_stamm')
+        return $this->table('intranet.betr_stamm')
             ->select('*')
             ->get();
     }
 
     public function getBetriebByBetriebsnr($betriebsnr)
     {
-        return DB::connection(config('bue-laravel.database.connection'))
-            ->table('intranet.betr_stamm')
+        return $this->table('intranet.betr_stamm')
             ->select('*')
             ->where('bnr', $betriebsnr)
             ->first();
@@ -65,10 +76,7 @@ class BueLaravel
 
     public function getBetriebsnrByVorgangsnummer(int|string $vorgangsnummer): int|string|null
     {
-        $connection = config('bue-laravel.database.connection');
-
-        $legacyMatch = DB::connection($connection)
-            ->table('intranet.betr_stamm')
+        $legacyMatch = $this->table('intranet.betr_stamm')
             ->select('bnr', 'gewerbeamtuuid')
             ->where('gewerbeamtuuid', $vorgangsnummer)
             ->first();
@@ -77,8 +85,7 @@ class BueLaravel
             return $legacyMatch->bnr;
         }
 
-        $formwerkMatch = DB::connection($connection)
-            ->table('intranet.betr_stamm')
+        $formwerkMatch = $this->table('intranet.betr_stamm')
             ->select('bnr')
             ->where('formwerkvgn', $vorgangsnummer)
             ->first();
@@ -88,8 +95,7 @@ class BueLaravel
 
     public function getVorgangsnummerByBetriebsnr(int|string $betriebsnr): ?string
     {
-        $data = DB::connection(config('bue-laravel.database.connection'))
-            ->table('intranet.betr_stamm')
+        $data = $this->table('intranet.betr_stamm')
             ->select('gewerbeamtuuid', 'formwerkvgn')
             ->where('bnr', $betriebsnr)
             ->first();
@@ -103,8 +109,7 @@ class BueLaravel
 
     public function getRaumById($id)
     {
-        return DB::connection(config('bue-laravel.database.connection'))
-            ->table('intranet.v_raumliste')
+        return $this->table('intranet.v_raumliste')
             ->select('*')
             ->where('id', $id)
             ->first();
@@ -112,8 +117,7 @@ class BueLaravel
 
     public function getLieferantByNummer(string $nummer): ?object
     {
-        return DB::connection(config('bue-laravel.database.connection'))
-            ->table('Intranet.MV_HWKDO_Lieferanten')
+        return $this->table('Intranet.MV_HWKDO_Lieferanten')
             ->select('lieferantenname', 'lieferantennummer')
             ->where('lieferantennummer', $nummer)
             ->first();
@@ -121,8 +125,7 @@ class BueLaravel
 
     public function getLieferanten(string $search = ''): Collection
     {
-        return DB::connection(config('bue-laravel.database.connection'))
-            ->table('Intranet.MV_HWKDO_Lieferanten')
+        return $this->table('Intranet.MV_HWKDO_Lieferanten')
             ->select('lieferantenname', 'lieferantennummer')
             ->when($search, fn ($q) => $q->whereRaw('LOWER(lieferantenname) LIKE ?', ['%'.strtolower($search).'%']))
             ->distinct()
@@ -138,8 +141,7 @@ class BueLaravel
      */
     public function getAllLieferanten(): Collection
     {
-        return DB::connection(config('bue-laravel.database.connection'))
-            ->table('Intranet.MV_HWKDO_Lieferanten')
+        return $this->table('Intranet.MV_HWKDO_Lieferanten')
             ->select('*')
             ->orderBy('lieferantenname')
             ->get();
@@ -151,8 +153,7 @@ class BueLaravel
      */
     public function getKostenstellen(string $search = ''): Collection
     {
-        return DB::connection(config('bue-laravel.database.connection'))
-            ->table('Intranet.HWKDO_Kostenstellen')
+        return $this->table('Intranet.HWKDO_Kostenstellen')
             ->select('*')
             ->when($search, fn ($q) => $q->whereRaw('LOWER(kobe) LIKE ?', ['%'.strtolower($search).'%']))
             ->orderBy('kostenstelle')
@@ -164,8 +165,7 @@ class BueLaravel
      */
     public function getKostenstelleByNummer(string $nummer): ?object
     {
-        return DB::connection(config('bue-laravel.database.connection'))
-            ->table('Intranet.HWKDO_Kostenstellen')
+        return $this->table('Intranet.HWKDO_Kostenstellen')
             ->select('*')
             ->where('kostenstelle', $nummer)
             ->first();

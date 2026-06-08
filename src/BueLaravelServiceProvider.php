@@ -2,9 +2,9 @@
 
 namespace Hwkdo\BueLaravel;
 
+use Hwkdo\BueLaravel\Commands\BueLaravelCommand;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
-use Hwkdo\BueLaravel\Commands\BueLaravelCommand;
 
 class BueLaravelServiceProvider extends PackageServiceProvider
 {
