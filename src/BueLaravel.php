@@ -1,12 +1,19 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Hwkdo\BueLaravel;
 
+use Hwkdo\BueLaravel\Support\FormwerkVorgangsnummerResolver;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class BueLaravel
 {
+    public function __construct(
+        private readonly FormwerkVorgangsnummerResolver $vorgangsnummerResolver = new FormwerkVorgangsnummerResolver,
+    ) {}
+
     public function getFachbereiche()
     {
         return DB::connection(config('bue-laravel.database.connection'))
@@ -56,26 +63,42 @@ class BueLaravel
             ->first();
     }
 
-    public function getBetriebsnrByVorgangsnummer($vorgangsnummer)
+    public function getBetriebsnrByVorgangsnummer(int|string $vorgangsnummer): int|string|null
     {
-        $data = DB::connection(config('bue-laravel.database.connection'))
+        $connection = config('bue-laravel.database.connection');
+
+        $legacyMatch = DB::connection($connection)
             ->table('intranet.betr_stamm')
-            ->select('bnr')
+            ->select('bnr', 'gewerbeamtuuid')
             ->where('gewerbeamtuuid', $vorgangsnummer)
             ->first();
 
-        return $data ? $data->bnr : null;
+        if ($legacyMatch !== null && $this->vorgangsnummerResolver->isVorgangsnummer($legacyMatch->gewerbeamtuuid)) {
+            return $legacyMatch->bnr;
+        }
+
+        $formwerkMatch = DB::connection($connection)
+            ->table('intranet.betr_stamm')
+            ->select('bnr')
+            ->where('formwerkvgn', $vorgangsnummer)
+            ->first();
+
+        return $formwerkMatch?->bnr;
     }
 
-    public function getVorgangsnummerByBetriebsnr($betriebsnr)
+    public function getVorgangsnummerByBetriebsnr(int|string $betriebsnr): ?string
     {
         $data = DB::connection(config('bue-laravel.database.connection'))
             ->table('intranet.betr_stamm')
-            ->select('gewerbeamtuuid')
+            ->select('gewerbeamtuuid', 'formwerkvgn')
             ->where('bnr', $betriebsnr)
             ->first();
 
-        return $data ? $data->gewerbeamtuuid : null;
+        if ($data === null) {
+            return null;
+        }
+
+        return $this->vorgangsnummerResolver->resolve($data->gewerbeamtuuid, $data->formwerkvgn);
     }
 
     public function getRaumById($id)
