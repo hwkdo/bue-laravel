@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Hwkdo\BueLaravel;
 
 use Hwkdo\BueLaravel\Support\FormwerkVorgangsnummerResolver;
+use Carbon\Carbon;
+use DateTimeInterface;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -169,5 +171,107 @@ class BueLaravel
             ->select('*')
             ->where('kostenstelle', $nummer)
             ->first();
+    }
+
+    /**
+     * Liefert die Teilnehmerliste einer Prüfung (distinct) anhand der Prüfungs-ID (mp.id).
+     *
+     * @return Collection<int, object{test: int|string, mpname: string, mpvname: string, mpgebdat: string|null, gewerbe: string|null, fachbereich: string|null}>
+     */
+    public function getPruefungsteilnehmerliste(int $pruefungId): Collection
+    {
+        return $this->table('MP.PRUEFLING_MP as p')
+            ->join('mp.handwerk as h', 'h.id', '=', 'p.handwerk_id')
+            ->join('mp.pruefling_zu_prueftermin as mpp', 'mpp.pruefling_id', '=', 'p.id')
+            ->join('mp.pruefung as mp', 'mp.id', '=', 'mpp.pruefung_id')
+            ->join('hwk.person as hp', 'hp.id', '=', 'p.person_id')
+            ->join('mp.ordnung as o', 'o.id', '=', 'mp.ordnung_id')
+            ->where('mp.id', $pruefungId)
+            ->distinct()
+            ->select([
+                'mp.id as test',
+                'hp.name as mpname',
+                'hp.vorname as mpvname',
+                'hp.geburtsdatum as mpgebdat',
+                'h.gewerbe as gewerbe',
+                'o.fachbereich as fachbereich',
+            ])
+            ->get();
+    }
+
+    /**
+     * Liefert Prüfungen mit Terminen im angegebenen Zeitraum, gefiltert nach Gewerk (Teilstring, case-insensitive).
+     *
+     * @return Collection<int, object{id: int|string, bezeichnung: string|null, termin_von: string, termin_bis: string|null, termin_bezeichnung: string|null, gewerbe: string|null, fachbereich: string|null}>
+     */
+    public function getPruefungsuebersicht(string $gewerbe, DateTimeInterface|string $von, DateTimeInterface|string $bis): Collection
+    {
+        $vonDate = Carbon::parse($von)->startOfDay()->format('Y-m-d H:i:s');
+        $bisDate = Carbon::parse($bis)->endOfDay()->format('Y-m-d H:i:s');
+
+        return $this->table('mp.pruefung as mp')
+            ->join('mp.pruefungstermin as pt', 'pt.pruefung_id', '=', 'mp.id')
+            ->join('mp.ordnung as o', 'o.id', '=', 'mp.ordnung_id')
+            ->join('mp.handwerk as h', 'h.id', '=', 'o.handwerk_id')
+            ->whereRaw('LOWER(h.gewerbe) LIKE ?', ['%'.strtolower($gewerbe).'%'])
+            ->whereBetween('pt.von', [$vonDate, $bisDate])
+            ->orderBy('pt.von')
+            ->orderBy('mp.id')
+            ->select([
+                'mp.id',
+                'mp.bezeichnung',
+                'pt.von as termin_von',
+                'pt.bis as termin_bis',
+                'pt.bezeichnung as termin_bezeichnung',
+                'h.gewerbe as gewerbe',
+                'o.fachbereich as fachbereich',
+            ])
+            ->get();
+    }
+
+    /**
+     * Liefert alle Termine einer Prüfung anhand der Prüfungs-ID (mp.id).
+     *
+     * @return Collection<int, object{id: int|string, bezeichnung: string|null, termin_von: string, termin_bis: string|null, termin_bezeichnung: string|null, gewerbe: string|null, fachbereich: string|null}>
+     */
+    public function getPruefungById(int|string $pruefungId): Collection
+    {
+        return $this->table('mp.pruefung as mp')
+            ->join('mp.pruefungstermin as pt', 'pt.pruefung_id', '=', 'mp.id')
+            ->join('mp.ordnung as o', 'o.id', '=', 'mp.ordnung_id')
+            ->join('mp.handwerk as h', 'h.id', '=', 'o.handwerk_id')
+            ->where('mp.id', $pruefungId)
+            ->orderBy('pt.von')
+            ->orderBy('mp.id')
+            ->select([
+                'mp.id',
+                'mp.bezeichnung',
+                'pt.von as termin_von',
+                'pt.bis as termin_bis',
+                'pt.bezeichnung as termin_bezeichnung',
+                'h.gewerbe as gewerbe',
+                'o.fachbereich as fachbereich',
+            ])
+            ->get();
+    }
+
+    /**
+     * Liefert alle Gewerke aus mp.ordnung → mp.handwerk (distinct, sortiert).
+     * Für Dropdown-Filter zu getPruefungsuebersicht(): value und label = gewerbe.
+     *
+     * @return Collection<int, object{id: int|string, gewerbe: string}>
+     */
+    public function getPruefungsGewerke(): Collection
+    {
+        return $this->table('mp.ordnung as o')
+            ->join('mp.handwerk as h', 'h.id', '=', 'o.handwerk_id')
+            ->whereNotNull('h.gewerbe')
+            ->distinct()
+            ->orderBy('h.gewerbe')
+            ->select([
+                'h.id',
+                'h.gewerbe',
+            ])
+            ->get();
     }
 }
