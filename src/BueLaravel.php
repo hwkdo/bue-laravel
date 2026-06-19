@@ -117,6 +117,17 @@ class BueLaravel
             ->first();
     }
 
+    /**
+     * Liefert einen OLV-Datensatz anhand der Online-ID aus intranet.OLV_N8N (oder null).
+     */
+    public function getOlvDataByOnlineId(int|string $onlineId): ?object
+    {
+        return $this->table('intranet.OLV_N8N')
+            ->select('*')
+            ->where('onlineid', $onlineId)
+            ->first();
+    }
+
     public function getLieferantByNummer(string $nummer): ?object
     {
         return $this->table('Intranet.MV_HWKDO_Lieferanten')
