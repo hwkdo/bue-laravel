@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Hwkdo\BueLaravel;
 
 use Hwkdo\BueLaravel\Commands\BueLaravelCommand;
@@ -22,4 +24,26 @@ class BueLaravelServiceProvider extends PackageServiceProvider
             ->hasMigration('create_bue_laravel_table')
             ->hasCommand(BueLaravelCommand::class);
     }
+
+    public function boot(): void
+    {
+        parent::boot();
+
+        $adminConnection = config('bue-laravel.database.admin_connection');
+
+        if (! is_string($adminConnection) || $adminConnection === '') {
+            return;
+        }
+
+        // Host-App oder Tests können die Connection bereits definiert haben.
+        if ($this->app['config']->has('database.connections.'.$adminConnection)) {
+            return;
+        }
+
+        $this->app['config']->set(
+            'database.connections.'.$adminConnection,
+            config('bue-laravel.database.admin'),
+        );
+    }
 }
+

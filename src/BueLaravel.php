@@ -28,9 +28,94 @@ class BueLaravel
         return $this->connectionName ?? config('bue-laravel.database.connection');
     }
 
+    public function adminConnection(): string
+    {
+        return config('bue-laravel.database.admin_connection');
+    }
+
     public function table(string $table): Builder
     {
         return DB::connection($this->connection())->table($table);
+    }
+
+    public function adminTable(string $table): Builder
+    {
+        return DB::connection($this->adminConnection())->table($table);
+    }
+
+    public function adminStatement(string $sql): bool
+    {
+        return DB::connection($this->adminConnection())->statement($sql);
+    }
+
+    /**
+     * Vergibt einem BUE-User eine Oracle-Rolle (GRANT role TO user).
+     */
+    public function grantBueRole(string $username, string $rolename): bool
+    {
+        $username = $this->assertOracleIdentifier($username, 'username');
+        $rolename = $this->assertOracleIdentifier($rolename, 'rolename');
+
+        return $this->adminStatement('grant '.$rolename.' to '.$username);
+    }
+
+    /**
+     * Entzieht einem BUE-User eine Oracle-Rolle (REVOKE role FROM user).
+     */
+    public function revokeBueRole(string $username, string $rolename): bool
+    {
+        $username = $this->assertOracleIdentifier($username, 'username');
+        $rolename = $this->assertOracleIdentifier($rolename, 'rolename');
+
+        return $this->adminStatement('revoke '.$rolename.' from '.$username);
+    }
+
+    /**
+     * Sperrt einen BUE-User (ALTER USER … ACCOUNT LOCK).
+     */
+    public function disableBueUser(string $username): bool
+    {
+        $username = $this->assertOracleIdentifier($username, 'username');
+
+        return $this->adminStatement('alter user '.$username.' account lock');
+    }
+
+    /**
+     * Entsperrt einen BUE-User (ALTER USER … ACCOUNT UNLOCK).
+     */
+    public function enableBueUser(string $username): bool
+    {
+        $username = $this->assertOracleIdentifier($username, 'username');
+
+        return $this->adminStatement('alter user '.$username.' account unlock');
+    }
+
+    /**
+     * Liefert die einem BUE-User gewährten Oracle-Rollen aus DBA_ROLE_PRIVS.
+     *
+     * @return Collection<int, string>
+     */
+    public function getBueRoles(string $username): Collection
+    {
+        $username = $this->assertOracleIdentifier($username, 'username');
+
+        return $this->adminTable('DBA_ROLE_PRIVS')
+            ->select('granted_role')
+            ->where('grantee', $username)
+            ->get()
+            ->pluck('granted_role');
+    }
+
+    /**
+     * @throws \InvalidArgumentException
+     */
+    private function assertOracleIdentifier(string $value, string $field): string
+    {
+        if (preg_match('/^[A-Za-z][A-Za-z0-9_#$]*$/', $value) !== 1) {
+            throw new \InvalidArgumentException("Invalid Oracle identifier for {$field}.");
+        }
+
+        return $value;
     }
 
     public function getFachbereiche()

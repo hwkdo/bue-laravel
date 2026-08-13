@@ -33,5 +33,6 @@ class TestCase extends Orchestra
             'prefix' => '',
         ]);
         config()->set('bue-laravel.database.connection', 'testing');
+        config()->set('bue-laravel.database.admin_connection', 'testing');
     }
 }
