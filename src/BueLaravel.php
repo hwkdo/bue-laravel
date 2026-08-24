@@ -161,6 +161,183 @@ class BueLaravel
             ->first();
     }
 
+    /**
+     * Sucht Betriebe über Betriebsnummer, Name, Anschrift oder Personen (Name/Geburtsdatum/Anschrift).
+     *
+     * @return Collection<int, object{
+     *     bnr: mixed,
+     *     name: string|null,
+     *     betriebsanschrift: string|null,
+     *     strasse: string|null,
+     *     hausnummer: string|null,
+     *     betr_plz: string|null,
+     *     betr_ort: string|null,
+     *     betriebsart: string|null,
+     *     rechtsform: string|null,
+     *     edat: string|null,
+     *     betr_email: string|null,
+     *     betr_telefon: string|null,
+     *     matched_on: list<string>
+     * }>
+     */
+    public function searchBetriebe(string $query, int $limit = 50): Collection
+    {
+        $query = trim($query);
+
+        if ($query === '' || mb_strlen($query) < 2) {
+            return collect();
+        }
+
+        $like = '%'.mb_strtolower($query).'%';
+
+        $rows = $this->table('intranet.betr_stamm as s')
+            ->select([
+                's.bnr',
+                's.name',
+                's.betriebsanschrift',
+                's.strasse',
+                's.hausnummer',
+                's.betr_plz',
+                's.betr_ort',
+                's.betriebsart',
+                's.rechtsform',
+                's.edat',
+                's.betr_email',
+                's.betr_telefon',
+            ])
+            ->where(function (Builder $q) use ($like): void {
+                $q->whereRaw('LOWER(s.bnr) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(s.name) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(s.betriebsanschrift) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(s.strasse) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(s.betr_plz) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(s.betr_ort) LIKE ?', [$like])
+                    ->orWhereExists(function (Builder $sub) use ($like): void {
+                        $sub->select(DB::raw('1'))
+                            ->from('intranet.betr_personen as p')
+                            ->whereColumn('p.betriebsnummer', 's.bnr')
+                            ->where(function (Builder $pq) use ($like): void {
+                                $pq->whereRaw('LOWER(p.name) LIKE ?', [$like])
+                                    ->orWhereRaw('LOWER(p.vorname) LIKE ?', [$like])
+                                    ->orWhereRaw('LOWER(p.geburtsdatum) LIKE ?', [$like])
+                                    ->orWhereRaw('LOWER(p.strasse) LIKE ?', [$like])
+                                    ->orWhereRaw('LOWER(p.plz) LIKE ?', [$like])
+                                    ->orWhereRaw('LOWER(p.ort) LIKE ?', [$like]);
+                            });
+                    });
+            })
+            ->orderBy('s.name')
+            ->limit($limit)
+            ->get();
+
+        return $rows->map(function (object $row) use ($query): object {
+            $row->matched_on = $this->resolveBetriebSearchMatches($row, $query);
+
+            return $row;
+        });
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function resolveBetriebSearchMatches(object $row, string $query): array
+    {
+        $needle = mb_strtolower($query);
+        $matches = [];
+
+        if (str_contains(mb_strtolower((string) $row->bnr), $needle)) {
+            $matches[] = 'bnr';
+        }
+
+        if (str_contains(mb_strtolower((string) ($row->name ?? '')), $needle)) {
+            $matches[] = 'name';
+        }
+
+        $anschrift = mb_strtolower(implode(' ', array_filter([
+            $row->betriebsanschrift ?? null,
+            $row->strasse ?? null,
+            $row->hausnummer ?? null,
+            $row->betr_plz ?? null,
+            $row->betr_ort ?? null,
+        ], fn ($value) => $value !== null && $value !== '')));
+
+        if (str_contains($anschrift, $needle)) {
+            $matches[] = 'anschrift';
+        }
+
+        if ($matches === []) {
+            $matches[] = 'person';
+        }
+
+        return $matches;
+    }
+
+    /**
+     * @return Collection<int, object>
+     */
+    public function getBetriebGewerbeByBetriebsnr(int|string $betriebsnr): Collection
+    {
+        return $this->table('intranet.betr_gewerbe')
+            ->select([
+                'betriebsnummer',
+                'betriebsart',
+                'gewerbe',
+                'gewerbename',
+                'spg',
+                'eintragungsdatum',
+                'teiltaetigkeit',
+                'eintragungsvoraussetzung',
+            ])
+            ->where('betriebsnummer', $betriebsnr)
+            ->orderBy('eintragungsdatum')
+            ->orderBy('gewerbename')
+            ->get();
+    }
+
+    /**
+     * @return Collection<int, object>
+     */
+    public function getBetriebPersonenByBetriebsnr(int|string $betriebsnr): Collection
+    {
+        return $this->table('intranet.betr_personen')
+            ->select([
+                'betriebsnummer',
+                'personennummer',
+                'name',
+                'vorname',
+                'geburtsdatum',
+                'strasse',
+                'plz',
+                'ort',
+                'personhatstellung',
+                'geschlecht',
+                'anredekennung',
+            ])
+            ->where('betriebsnummer', $betriebsnr)
+            ->orderBy('name')
+            ->orderBy('vorname')
+            ->get();
+    }
+
+    /**
+     * Stammdaten inkl. Gewerbe- und Personenlisten.
+     *
+     * @return object{gewerbe: Collection, personen: Collection}|null
+     */
+    public function getBetriebDetailByBetriebsnr(int|string $betriebsnr): ?object
+    {
+        $stamm = $this->getBetriebByBetriebsnr($betriebsnr);
+
+        if ($stamm === null) {
+            return null;
+        }
+
+        $stamm->gewerbe = $this->getBetriebGewerbeByBetriebsnr($betriebsnr);
+        $stamm->personen = $this->getBetriebPersonenByBetriebsnr($betriebsnr);
+
+        return $stamm;
+    }
+
     public function getBetriebsnrByVorgangsnummer(int|string $vorgangsnummer): int|string|null
     {
         $legacyMatch = $this->table('intranet.betr_stamm')
