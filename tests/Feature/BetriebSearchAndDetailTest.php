@@ -14,6 +14,7 @@ beforeEach(function () {
         // Schema already attached for this in-memory connection.
     }
 
+    $pdo->exec('DROP TABLE IF EXISTS intranet.betr_person_quali');
     $pdo->exec('DROP TABLE IF EXISTS intranet.betr_personen');
     $pdo->exec('DROP TABLE IF EXISTS intranet.betr_gewerbe');
     $pdo->exec('DROP TABLE IF EXISTS intranet.betr_stamm');
@@ -65,6 +66,21 @@ beforeEach(function () {
             personhatstellung TEXT,
             geschlecht TEXT,
             anredekennung TEXT
+        )'
+    );
+
+    $pdo->exec(
+        'CREATE TABLE intranet.betr_person_quali (
+            personennummer TEXT,
+            status TEXT,
+            gewerbe TEXT,
+            gewerbe_bezeichnung TEXT,
+            ausbildungsberechtigung TEXT,
+            pruefungsdatum TEXT,
+            pruefungsort TEXT,
+            teiltaetigkeit TEXT,
+            befristungsdatum TEXT,
+            eintragungsvoraussetzung TEXT
         )'
     );
 });
@@ -151,6 +167,21 @@ function seedBetriebSearchFixtures(): void
             'anredekennung' => 'Herr',
         ],
     ]);
+
+    DB::connection('testing')->table('intranet.betr_person_quali')->insert([
+        [
+            'personennummer' => '7000163201',
+            'status' => 'aktiv',
+            'gewerbe' => '12130',
+            'gewerbe_bezeichnung' => 'Metallbauerhandwerk',
+            'ausbildungsberechtigung' => null,
+            'pruefungsdatum' => null,
+            'pruefungsort' => null,
+            'teiltaetigkeit' => null,
+            'befristungsdatum' => null,
+            'eintragungsvoraussetzung' => '§ 7.1a HwO-Meister',
+        ],
+    ]);
 }
 
 it('returns empty collection for short search queries', function () {
@@ -225,7 +256,10 @@ it('loads personen for a betrieb', function () {
 
     expect($personen)->toHaveCount(1)
         ->and($personen->first()->name)->toBe('Samsel')
-        ->and($personen->first()->personhatstellung)->toBe('Inhaber');
+        ->and($personen->first()->personhatstellung)->toBe('Inhaber')
+        ->and($personen->first()->qualifikationen)->toHaveCount(1)
+        ->and($personen->first()->qualifikationen->first()->gewerbe_bezeichnung)->toBe('Metallbauerhandwerk')
+        ->and($personen->first()->qualifikationen->first()->eintragungsvoraussetzung)->toBe('§ 7.1a HwO-Meister');
 });
 
 it('returns nested detail with gewerbe and personen', function () {
@@ -236,7 +270,17 @@ it('returns nested detail with gewerbe and personen', function () {
     expect($detail)->not->toBeNull()
         ->and($detail->name)->toContain('Bodenhorn')
         ->and($detail->gewerbe)->toHaveCount(1)
-        ->and($detail->personen)->toHaveCount(1);
+        ->and($detail->personen)->toHaveCount(1)
+        ->and($detail->personen->first()->qualifikationen)->toHaveCount(1);
+});
+
+it('loads person qualifikationen by personennummern', function () {
+    seedBetriebSearchFixtures();
+
+    $qualis = app(BueLaravel::class)->getPersonQualifikationenByPersonennummern(['7000163201']);
+
+    expect($qualis)->toHaveCount(1)
+        ->and($qualis->first()->gewerbe_bezeichnung)->toBe('Metallbauerhandwerk');
 });
 
 it('returns null detail for unknown betriebsnummer', function () {

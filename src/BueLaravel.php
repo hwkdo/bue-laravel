@@ -299,7 +299,7 @@ class BueLaravel
      */
     public function getBetriebPersonenByBetriebsnr(int|string $betriebsnr): Collection
     {
-        return $this->table('intranet.betr_personen')
+        $personen = $this->table('intranet.betr_personen')
             ->select([
                 'betriebsnummer',
                 'personennummer',
@@ -316,6 +316,76 @@ class BueLaravel
             ->where('betriebsnummer', $betriebsnr)
             ->orderBy('name')
             ->orderBy('vorname')
+            ->get();
+
+        return $this->attachPersonQualifikationen($personen);
+    }
+
+    /**
+     * @param  Collection<int, object>  $personen
+     * @return Collection<int, object>
+     */
+    private function attachPersonQualifikationen(Collection $personen): Collection
+    {
+        if ($personen->isEmpty()) {
+            return $personen;
+        }
+
+        $personennummern = $personen
+            ->pluck('personennummer')
+            ->filter(fn ($nummer) => $nummer !== null && $nummer !== '')
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($personennummern === []) {
+            return $personen->map(function (object $person): object {
+                $person->qualifikationen = collect();
+
+                return $person;
+            });
+        }
+
+        $qualifikationen = $this->getPersonQualifikationenByPersonennummern($personennummern)
+            ->groupBy(fn (object $quali) => (string) $quali->personennummer);
+
+        return $personen->map(function (object $person) use ($qualifikationen): object {
+            $person->qualifikationen = $qualifikationen
+                ->get((string) $person->personennummer, collect())
+                ->values();
+
+            return $person;
+        });
+    }
+
+    /**
+     * Qualifikationen aus intranet.betr_person_quali.
+     *
+     * @param  list<int|string>  $personennummern
+     * @return Collection<int, object>
+     */
+    public function getPersonQualifikationenByPersonennummern(array $personennummern): Collection
+    {
+        if ($personennummern === []) {
+            return collect();
+        }
+
+        return $this->table('intranet.betr_person_quali')
+            ->select([
+                'personennummer',
+                'status',
+                'gewerbe',
+                'gewerbe_bezeichnung',
+                'ausbildungsberechtigung',
+                'pruefungsdatum',
+                'pruefungsort',
+                'teiltaetigkeit',
+                'befristungsdatum',
+                'eintragungsvoraussetzung',
+            ])
+            ->whereIn('personennummer', $personennummern)
+            ->orderBy('gewerbe_bezeichnung')
+            ->orderBy('eintragungsvoraussetzung')
             ->get();
     }
 
