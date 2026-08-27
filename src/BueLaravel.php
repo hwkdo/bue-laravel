@@ -182,13 +182,11 @@ class BueLaravel
      */
     public function searchBetriebe(string $query, int $limit = 50): Collection
     {
-        $query = trim($query);
+        $tokens = $this->tokenizeBetriebSearchQuery($query);
 
-        if ($query === '' || mb_strlen($query) < 2) {
+        if ($tokens === []) {
             return collect();
         }
-
-        $like = '%'.mb_strtolower($query).'%';
 
         $rows = $this->table('intranet.betr_stamm as s')
             ->select([
@@ -205,33 +203,21 @@ class BueLaravel
                 's.betr_email',
                 's.betr_telefon',
             ])
-            ->where(function (Builder $q) use ($like): void {
-                $q->whereRaw('LOWER(s.bnr) LIKE ?', [$like])
-                    ->orWhereRaw('LOWER(s.name) LIKE ?', [$like])
-                    ->orWhereRaw('LOWER(s.betriebsanschrift) LIKE ?', [$like])
-                    ->orWhereRaw('LOWER(s.strasse) LIKE ?', [$like])
-                    ->orWhereRaw('LOWER(s.betr_plz) LIKE ?', [$like])
-                    ->orWhereRaw('LOWER(s.betr_ort) LIKE ?', [$like])
-                    ->orWhereExists(function (Builder $sub) use ($like): void {
-                        $sub->select(DB::raw('1'))
-                            ->from('intranet.betr_personen as p')
-                            ->whereColumn('p.betriebsnummer', 's.bnr')
-                            ->where(function (Builder $pq) use ($like): void {
-                                $pq->whereRaw('LOWER(p.name) LIKE ?', [$like])
-                                    ->orWhereRaw('LOWER(p.vorname) LIKE ?', [$like])
-                                    ->orWhereRaw('LOWER(p.geburtsdatum) LIKE ?', [$like])
-                                    ->orWhereRaw('LOWER(p.strasse) LIKE ?', [$like])
-                                    ->orWhereRaw('LOWER(p.plz) LIKE ?', [$like])
-                                    ->orWhereRaw('LOWER(p.ort) LIKE ?', [$like]);
-                            });
+            ->where(function (Builder $q) use ($tokens): void {
+                foreach ($tokens as $token) {
+                    $like = '%'.mb_strtolower($token).'%';
+
+                    $q->where(function (Builder $tokenQuery) use ($like): void {
+                        $this->applyBetriebSearchTokenConstraint($tokenQuery, $like);
                     });
+                }
             })
             ->orderBy('s.name')
             ->limit($limit)
             ->get();
 
-        return $rows->map(function (object $row) use ($query): object {
-            $row->matched_on = $this->resolveBetriebSearchMatches($row, $query);
+        return $rows->map(function (object $row) use ($tokens): object {
+            $row->matched_on = $this->resolveBetriebSearchMatches($row, $tokens);
 
             return $row;
         });
@@ -240,19 +226,60 @@ class BueLaravel
     /**
      * @return list<string>
      */
-    private function resolveBetriebSearchMatches(object $row, string $query): array
+    private function tokenizeBetriebSearchQuery(string $query): array
     {
-        $needle = mb_strtolower($query);
+        $query = trim($query);
+
+        if ($query === '' || mb_strlen($query) < 2) {
+            return [];
+        }
+
+        $tokens = preg_split('/\s+/u', $query, -1, PREG_SPLIT_NO_EMPTY);
+
+        if ($tokens === false) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            $tokens,
+            fn (string $token): bool => mb_strlen($token) >= 2,
+        ));
+    }
+
+    private function applyBetriebSearchTokenConstraint(Builder $query, string $like): void
+    {
+        $query->whereRaw('LOWER(s.bnr) LIKE ?', [$like])
+            ->orWhereRaw('LOWER(s.name) LIKE ?', [$like])
+            ->orWhereRaw('LOWER(s.betriebsanschrift) LIKE ?', [$like])
+            ->orWhereRaw('LOWER(s.strasse) LIKE ?', [$like])
+            ->orWhereRaw('LOWER(s.betr_plz) LIKE ?', [$like])
+            ->orWhereRaw('LOWER(s.betr_ort) LIKE ?', [$like])
+            ->orWhereExists(function (Builder $sub) use ($like): void {
+                $sub->select(DB::raw('1'))
+                    ->from('intranet.betr_personen as p')
+                    ->whereColumn('p.betriebsnummer', 's.bnr')
+                    ->where(function (Builder $pq) use ($like): void {
+                        $pq->whereRaw('LOWER(p.name) LIKE ?', [$like])
+                            ->orWhereRaw('LOWER(p.vorname) LIKE ?', [$like])
+                            ->orWhereRaw('LOWER(p.geburtsdatum) LIKE ?', [$like])
+                            ->orWhereRaw('LOWER(p.strasse) LIKE ?', [$like])
+                            ->orWhereRaw('LOWER(p.plz) LIKE ?', [$like])
+                            ->orWhereRaw('LOWER(p.ort) LIKE ?', [$like]);
+                    });
+            });
+    }
+
+    /**
+     * @param  list<string>  $tokens
+     * @return list<string>
+     */
+    private function resolveBetriebSearchMatches(object $row, array $tokens): array
+    {
         $matches = [];
+        $betriebMatchedTokenCount = 0;
 
-        if (str_contains(mb_strtolower((string) $row->bnr), $needle)) {
-            $matches[] = 'bnr';
-        }
-
-        if (str_contains(mb_strtolower((string) ($row->name ?? '')), $needle)) {
-            $matches[] = 'name';
-        }
-
+        $bnr = mb_strtolower((string) $row->bnr);
+        $name = mb_strtolower((string) ($row->name ?? ''));
         $anschrift = mb_strtolower(implode(' ', array_filter([
             $row->betriebsanschrift ?? null,
             $row->strasse ?? null,
@@ -261,15 +288,35 @@ class BueLaravel
             $row->betr_ort ?? null,
         ], fn ($value) => $value !== null && $value !== '')));
 
-        if (str_contains($anschrift, $needle)) {
-            $matches[] = 'anschrift';
+        foreach ($tokens as $token) {
+            $needle = mb_strtolower($token);
+            $matchedBetriebField = false;
+
+            if (str_contains($bnr, $needle)) {
+                $matches['bnr'] = true;
+                $matchedBetriebField = true;
+            }
+
+            if (str_contains($name, $needle)) {
+                $matches['name'] = true;
+                $matchedBetriebField = true;
+            }
+
+            if (str_contains($anschrift, $needle)) {
+                $matches['anschrift'] = true;
+                $matchedBetriebField = true;
+            }
+
+            if ($matchedBetriebField) {
+                $betriebMatchedTokenCount++;
+            }
         }
 
-        if ($matches === []) {
-            $matches[] = 'person';
+        if ($betriebMatchedTokenCount < count($tokens) || $matches === []) {
+            $matches['person'] = true;
         }
 
-        return $matches;
+        return array_keys($matches);
     }
 
     /**

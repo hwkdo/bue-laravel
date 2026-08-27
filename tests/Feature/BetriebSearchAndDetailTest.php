@@ -200,6 +200,34 @@ it('finds betriebe by betriebsnummer', function () {
         ->and($results->first()->matched_on)->toContain('bnr');
 });
 
+it('finds betriebe when tokens match across different fields', function () {
+    seedBetriebSearchFixtures();
+
+    $results = app(BueLaravel::class)->searchBetriebe('Bodenhorn Bochum');
+
+    expect($results)->toHaveCount(1)
+        ->and($results->first()->bnr)->toBe('70001632')
+        ->and($results->first()->matched_on)->toContain('name')
+        ->and($results->first()->matched_on)->toContain('anschrift');
+});
+
+it('finds betriebe when tokens match name and person geburtsdatum', function () {
+    seedBetriebSearchFixtures();
+
+    $results = app(BueLaravel::class)->searchBetriebe('Gerhardt 25.05.1954');
+
+    expect($results)->toHaveCount(1)
+        ->and($results->first()->bnr)->toBe('70005263')
+        ->and($results->first()->matched_on)->toContain('name')
+        ->and($results->first()->matched_on)->toContain('person');
+});
+
+it('requires every token to match', function () {
+    seedBetriebSearchFixtures();
+
+    expect(app(BueLaravel::class)->searchBetriebe('Bodenhorn Dortmund'))->toBeEmpty();
+});
+
 it('finds betriebe by name', function () {
     seedBetriebSearchFixtures();
 
