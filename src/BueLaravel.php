@@ -664,4 +664,87 @@ class BueLaravel
             ])
             ->get();
     }
+
+    /**
+     * Liefert Prüfungstermine für Ticket-Erstellung an einem Kalendertag (View TICKET_PRUEFUNGEN).
+     *
+     * @return Collection<int, object{
+     *     pruefung_id: int|string,
+     *     ordnung: string|null,
+     *     pruefung_bezeichnung: string|null,
+     *     bearbeiter_userid: string|null,
+     *     bearbeiter_vorname: string|null,
+     *     bearbeiter_nachname: string|null,
+     *     bearbeiter_telefon: string|null,
+     *     bearbeiter_email: string|null,
+     *     bearbeiter_zimmer: string|null,
+     *     bearbeiter_abteilung: string|null,
+     *     termin_id: int|string,
+     *     termin_lfdnr: int|string|null,
+     *     termin_bezeichnung: string|null,
+     *     datum: string,
+     *     uhrzeit_von: string|null,
+     *     uhrzeit_bis: string|null,
+     *     pruefungsort_id: int|string|null,
+     *     pruefungsort_name: string|null,
+     *     gebaeudenummer: string|null,
+     *     raumnummer: string|null,
+     *     strasse: string|null,
+     *     hausnummer: string|null,
+     *     plz: string|null,
+     *     ort: string|null,
+     *     anzahl_prueflinge: int|string|null
+     * }>
+     */
+    public function getTicketPruefungenByDatum(DateTimeInterface|string $datum): Collection
+    {
+        $dayStart = Carbon::parse($datum)->startOfDay()->format('Y-m-d H:i:s');
+        $dayEnd = Carbon::parse($datum)->endOfDay()->format('Y-m-d H:i:s');
+
+        return $this->table('TICKET_PRUEFUNGEN')
+            ->whereBetween('datum', [$dayStart, $dayEnd])
+            ->orderBy('uhrzeit_von')
+            ->orderBy('termin_id')
+            ->select('*')
+            ->get();
+    }
+
+    /**
+     * Liefert einen einzelnen Prüfungstermin aus TICKET_PRUEFUNGEN anhand der TERMIN_ID.
+     *
+     * @return object{
+     *     pruefung_id: int|string,
+     *     ordnung: string|null,
+     *     pruefung_bezeichnung: string|null,
+     *     bearbeiter_userid: string|null,
+     *     bearbeiter_vorname: string|null,
+     *     bearbeiter_nachname: string|null,
+     *     bearbeiter_telefon: string|null,
+     *     bearbeiter_email: string|null,
+     *     bearbeiter_zimmer: string|null,
+     *     bearbeiter_abteilung: string|null,
+     *     termin_id: int|string,
+     *     termin_lfdnr: int|string|null,
+     *     termin_bezeichnung: string|null,
+     *     datum: string,
+     *     uhrzeit_von: string|null,
+     *     uhrzeit_bis: string|null,
+     *     pruefungsort_id: int|string|null,
+     *     pruefungsort_name: string|null,
+     *     gebaeudenummer: string|null,
+     *     raumnummer: string|null,
+     *     strasse: string|null,
+     *     hausnummer: string|null,
+     *     plz: string|null,
+     *     ort: string|null,
+     *     anzahl_prueflinge: int|string|null
+     * }|null
+     */
+    public function getTicketPruefungByTerminId(int|string $terminId): ?object
+    {
+        return $this->table('TICKET_PRUEFUNGEN')
+            ->where('termin_id', $terminId)
+            ->select('*')
+            ->first();
+    }
 }
